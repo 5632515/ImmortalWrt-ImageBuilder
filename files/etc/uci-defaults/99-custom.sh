@@ -7,7 +7,9 @@ echo "Starting 99-custom.sh at $(date)" >>$LOGFILE
 # 因为本项目中 单网口模式是dhcp模式 直接就能上网并且访问web界面 避免新手每次都要修改/etc/config/network中的静态ip
 # 当你刷机运行后 都调整好了 你完全可以在web页面自行关闭 wan口防火墙的入站数据
 # 具体操作方法：网络——防火墙 在wan的入站数据 下拉选项里选择 拒绝 保存并应用即可。
-uci set firewall.@zone[1].input='ACCEPT'
+# 注意: 这里原本写死为 @zone[1](默认即 wan 区域)。旁路由模式下 wan 会被删除,
+# 下方旁路由分支会按区域名重新精确设置 lan 区域, 不依赖此处的下标。
+uci -q set firewall.@zone[1].input='ACCEPT'
 
 # 设置主机名映射，解决安卓原生 TV 无法联网的问题
 uci add dhcp domain
@@ -80,7 +82,8 @@ elif [ "$count" -gt 1 ]; then
     uci set network.wan6.proto='dhcpv6'
 
     # 查找 br-lan 设备 section
-    section=$(uci show network | awk -F '[.=]' '/\.@?device\[\d+\]\.name=.br-lan.$/ {print $2; exit}')
+    # 注意: busybox awk 不支持 GNU 的 \d, 必须用 POSIX 的 [0-9]
+    section=$(uci show network | awk -F '[.=]' '/\.@?device\[[0-9]+\]\.name=.br-lan.$/ {print $2; exit}')
     if [ -z "$section" ]; then
         echo "error：cannot find device 'br-lan'." >>$LOGFILE
     else
@@ -238,6 +241,29 @@ if [ "$enable_bypass" = "yes" ]; then
     uci -q delete network.wan
     uci -q delete network.wan6
 
+    # 【关键】把原 WAN 网口并入 br-lan
+    # 删除 network.wan 只是移除逻辑接口, 物理网口(如 eth0)会变成
+    # 既不属于任何网桥、也没有任何接口引用的游离状态, 内核不会将其 up,
+    # 表现就是插网线后客户端拿不到地址(169.254.x.x 自分配地址)。
+    # 单臂旁路由应让两个物理口都成为同一二层网桥的成员, 插哪个口都能用。
+    # 注意: busybox awk 不支持 GNU 的 \d, 必须用 POSIX 的 [0-9]
+    br_section=$(uci show network | awk -F '[.=]' '/\.@?device\[[0-9]+\]\.name=.br-lan.$/ {print $2; exit}')
+    if [ -n "$br_section" ]; then
+        # 重建 ports 列表: 所有物理网口全部加入网桥
+        uci -q delete "network.$br_section.ports"
+        for port in $ifnames; do
+            uci add_list "network.$br_section.ports"="$port"
+        done
+        echo "Bypass: br-lan ports = $ifnames" >>$LOGFILE
+
+        # 网桥成员全部拔掉时也保持网桥存在, 避免管理地址随之消失
+        uci set "network.$br_section.bridge_empty"='1'
+        # 单臂模式下缩短 STP 转发延迟, 避免开机前几秒丢包
+        uci set "network.$br_section.forward_delay"='2'
+    else
+        echo "Bypass WARN: br-lan section not found, ports unchanged" >>$LOGFILE
+    fi
+
     # LAN 静态地址 + 指向主路由网关
     uci set network.lan.proto='static'
     uci set network.lan.ipaddr="${bypass_ip:-192.168.110.248}"
@@ -246,21 +272,58 @@ if [ "$enable_bypass" = "yes" ]; then
     uci set network.lan.dns="${bypass_dns:-223.5.5.5}"
     uci set network.lan.delegate='0'
 
-    # 单臂模式下缩短 STP 转发延迟, 避免开机前几秒丢包
-    br_section=$(uci show network | awk -F '[.=]' '/\.@?device\[\d+\]\.name=.br-lan.$/ {print $2; exit}')
-    if [ -n "$br_section" ]; then
-        uci set "network.$br_section.bridge_empty"='1'
-        uci set "network.$br_section.forward_delay"='2'
-    fi
-
     # 关闭 DHCP 服务, 地址分配仍由主路由负责
     uci set dhcp.lan.ignore='1'
     uci -q delete dhcp.lan.ra
     uci -q delete dhcp.lan.dhcpv6
 
+    # 【关键】防火墙 lan 区域必须放行入站, 否则删掉 wan 后
+    # 上方第 15 行的 firewall.@zone[1].input=ACCEPT 会落在不存在的区域上,
+    # 导致 LuCI 与 SSH 无法访问。这里按名字精确定位 lan 区域。
+    lan_zone=$(uci show firewall | awk -F '[.=]' '/\.@?zone\[[0-9]+\]\.name=.lan.$/ {print $2; exit}')
+    if [ -n "$lan_zone" ]; then
+        uci set "firewall.$lan_zone.input"='ACCEPT'
+        uci set "firewall.$lan_zone.forward"='ACCEPT'
+        uci set "firewall.$lan_zone.masq"='0'
+        echo "Bypass: firewall lan zone = $lan_zone (input ACCEPT)" >>$LOGFILE
+    fi
+    # 移除指向已删除 wan 区域的转发规则
+    for idx in $(uci show firewall | grep '=forwarding' | cut -d'[' -f2 | cut -d']' -f1 | sort -rn); do
+        fsrc=$(uci -q get firewall.@forwarding[$idx].src)
+        fdest=$(uci -q get firewall.@forwarding[$idx].dest)
+        if [ "$fsrc" = "wan" ] || [ "$fdest" = "wan" ]; then
+            uci -q delete firewall.@forwarding[$idx]
+        fi
+    done
+    # 删除 wan 区域本体
+    wan_zone=$(uci show firewall | awk -F '[.=]' '/\.@?zone\[[0-9]+\]\.name=.wan.$/ {print $2; exit}')
+    [ -n "$wan_zone" ] && uci -q delete "firewall.$wan_zone"
+
     uci commit network
     uci commit dhcp
+    uci commit firewall
     echo "Bypass mode done: ${bypass_ip:-192.168.110.248} gw ${bypass_gateway:-192.168.110.1}" >>$LOGFILE
+
+    # 【救援】写入一键回退脚本。
+    # 若旁路由参数与实际网段不符导致失联,
+    # 可用 USB 转串口或 TF 卡挂载执行它恢复为 DHCP 自动取地址。
+    cat > /usr/sbin/bypass-rescue.sh <<'RESCUE'
+#!/bin/sh
+# 旁路由救援: 恢复 LAN 为 DHCP 客户端, 重新启用 DHCP 服务器
+# 用法: sh /usr/sbin/bypass-rescue.sh  然后重启或 /etc/init.d/network restart
+uci set network.lan.proto='dhcp'
+uci -q delete network.lan.ipaddr
+uci -q delete network.lan.netmask
+uci -q delete network.lan.gateway
+uci -q delete network.lan.dns
+uci -q delete dhcp.lan.ignore
+uci commit network
+uci commit dhcp
+echo "已恢复为 DHCP 模式, 重启网络中..."
+/etc/init.d/network restart
+RESCUE
+    chmod +x /usr/sbin/bypass-rescue.sh
+    echo "Rescue script written to /usr/sbin/bypass-rescue.sh" >>$LOGFILE
 fi
 
 exit 0
