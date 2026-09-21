@@ -62,7 +62,65 @@ if [ "$INCLUDE_DOCKER" = "yes" ]; then
 fi
 # 文件管理器
 PACKAGES="$PACKAGES luci-i18n-filemanager-zh-cn"
-# ======== shell/custom-packages.sh =======
+
+# ==========================================================
+# NanoPi R4S (RK3399 / aarch64_generic) 常用驱动与依赖组件
+# 所有包名均已在 immortalwrt 25.12.x aarch64_generic 源中核实存在
+# ==========================================================
+
+# ---- 代理内核与透明代理内核模块 (PassWall 必需) ----
+PACKAGES="$PACKAGES xray-core"
+PACKAGES="$PACKAGES sing-box"
+PACKAGES="$PACKAGES hysteria"
+PACKAGES="$PACKAGES geoview"
+PACKAGES="$PACKAGES chinadns-ng"
+PACKAGES="$PACKAGES dns2socks"
+PACKAGES="$PACKAGES ipt2socks"
+PACKAGES="$PACKAGES microsocks"
+PACKAGES="$PACKAGES tcping"
+PACKAGES="$PACKAGES haproxy"
+PACKAGES="$PACKAGES v2ray-geoip v2ray-geosite"
+# nftables 透明代理模块 (25.12 默认 fw4/nftables)
+PACKAGES="$PACKAGES kmod-nft-socket kmod-nft-tproxy kmod-nft-nat"
+# iptables 兼容层, 供 PassWall 回落到 iptables 模式使用
+PACKAGES="$PACKAGES iptables-nft iptables-mod-socket iptables-mod-tproxy"
+PACKAGES="$PACKAGES kmod-tun"
+PACKAGES="$PACKAGES kmod-inet-diag"
+
+# ---- 网络性能与拥塞控制 ----
+PACKAGES="$PACKAGES kmod-tcp-bbr"
+
+# ---- RK3399 板载与外设驱动 ----
+# R4S 原生千兆网卡 (RTL8211 PHY + PCIe r8169)
+PACKAGES="$PACKAGES kmod-r8169"
+# USB 3.0 外接网卡常用驱动
+PACKAGES="$PACKAGES kmod-usb-net kmod-usb-net-rtl8152 kmod-usb-net-asix-ax88179"
+# USB 存储与常用文件系统
+PACKAGES="$PACKAGES kmod-usb-storage kmod-usb-storage-uas"
+PACKAGES="$PACKAGES kmod-fs-ext4 kmod-fs-vfat kmod-fs-exfat kmod-fs-ntfs3"
+PACKAGES="$PACKAGES kmod-nls-utf8 kmod-nls-cp437 kmod-nls-iso8859-1"
+# 注: RK3399 的 PWM 控制器与硬件加密引擎均为内核内建(built-in),
+# 无独立 kmod 包, /sys/class/pwm/pwmchip1 开机即存在, 无需额外安装。
+# 板载温度传感器(thermal_zone0)同为内建。
+
+# ---- 基础网络工具与证书 ----
+PACKAGES="$PACKAGES ca-certificates ca-bundle"
+PACKAGES="$PACKAGES wget-ssl"
+PACKAGES="$PACKAGES ip-full"
+PACKAGES="$PACKAGES bind-dig"
+PACKAGES="$PACKAGES nftables-json"
+PACKAGES="$PACKAGES ethtool"
+PACKAGES="$PACKAGES pciutils usbutils"
+PACKAGES="$PACKAGES htop"
+PACKAGES="$PACKAGES bash"
+PACKAGES="$PACKAGES unzip"
+PACKAGES="$PACKAGES luci-compat"
+
+# ---- 旁路由常用 LuCI 组件 ----
+PACKAGES="$PACKAGES luci-i18n-upnp-zh-cn"
+PACKAGES="$PACKAGES luci-i18n-ttyd-zh-cn"
+
+# ======== shell/apk-custom-packages.sh =======
 # 合并imm仓库以外的第三方插件
 PACKAGES="$PACKAGES $CUSTOM_PACKAGES"
 

@@ -30,8 +30,13 @@
 #CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-daed-zh-cn"
 # 任务设置 by sirpdboy
 #CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-taskplan luci-i18n-taskplan-zh-cn"
-# MosDNS
-#CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-mosdns luci-i18n-mosdns-zh-cn"
+# MosDNS (来自第三方 run 包 25-mosdns_v5.3.4-r5_aarch64_generic.run)
+# imm 25.12.x 官方源仅收录 mosdns 主程序, 不含 luci 插件, 故必须由 run 包提供
+CUSTOM_PACKAGES="$CUSTOM_PACKAGES mosdns luci-app-mosdns luci-i18n-mosdns-zh-cn"
+
+# PassWall (来自第三方 run 包 25_PassWall_26.6.2_aarch64_generic.run)
+# 代理内核 xray-core/sing-box/hysteria/geoview 等已在 rockchip/build25.sh 中声明
+CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-passwall luci-i18n-passwall-zh-cn"
 
 # 仓库内代理相关apk
 #CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-nikki-zh-cn"

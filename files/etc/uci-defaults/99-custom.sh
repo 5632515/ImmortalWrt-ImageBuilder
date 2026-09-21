@@ -223,4 +223,44 @@ if grep -qi "NanoPi R4S" /proc/device-tree/model 2>/dev/null && [ -x /etc/init.d
     echo "fanctl enabled for NanoPi R4S" >>$LOGFILE
 fi
 
+# ---- 旁路由(单臂)模式 ----
+# 若存在 /etc/config/bypass-settings 且 enable_bypass=yes,
+# 则将上方生成的主路由配置(WAN+LAN)改写为单臂旁路由配置。
+BYPASS_FILE="/etc/config/bypass-settings"
+if [ -f "$BYPASS_FILE" ]; then
+    . "$BYPASS_FILE"
+fi
+
+if [ "$enable_bypass" = "yes" ]; then
+    echo "Configuring bypass (single-arm) mode..." >>$LOGFILE
+
+    # 旁路由不需要 WAN/WAN6, 避免与主路由抢 DHCP
+    uci -q delete network.wan
+    uci -q delete network.wan6
+
+    # LAN 静态地址 + 指向主路由网关
+    uci set network.lan.proto='static'
+    uci set network.lan.ipaddr="${bypass_ip:-192.168.110.248}"
+    uci set network.lan.netmask="${bypass_netmask:-255.255.255.0}"
+    uci set network.lan.gateway="${bypass_gateway:-192.168.110.1}"
+    uci set network.lan.dns="${bypass_dns:-223.5.5.5}"
+    uci set network.lan.delegate='0'
+
+    # 单臂模式下缩短 STP 转发延迟, 避免开机前几秒丢包
+    br_section=$(uci show network | awk -F '[.=]' '/\.@?device\[\d+\]\.name=.br-lan.$/ {print $2; exit}')
+    if [ -n "$br_section" ]; then
+        uci set "network.$br_section.bridge_empty"='1'
+        uci set "network.$br_section.forward_delay"='2'
+    fi
+
+    # 关闭 DHCP 服务, 地址分配仍由主路由负责
+    uci set dhcp.lan.ignore='1'
+    uci -q delete dhcp.lan.ra
+    uci -q delete dhcp.lan.dhcpv6
+
+    uci commit network
+    uci commit dhcp
+    echo "Bypass mode done: ${bypass_ip:-192.168.110.248} gw ${bypass_gateway:-192.168.110.1}" >>$LOGFILE
+fi
+
 exit 0
