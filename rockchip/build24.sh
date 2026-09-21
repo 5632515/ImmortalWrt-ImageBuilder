@@ -113,6 +113,10 @@ else
 fi
 
 
+# 确保自定义 init.d / sbin 脚本有可执行权限（GitHub 网页上传的文件默认 644）
+[ -d files/etc/init.d ] && chmod +x files/etc/init.d/* 2>/dev/null
+[ -d files/usr/sbin ] && chmod +x files/usr/sbin/* 2>/dev/null
+
 make image PROFILE=$PROFILE PACKAGES="$PACKAGES" FILES="/home/build/immortalwrt/files" ROOTFS_PARTSIZE=$ROOTFS_PARTSIZE
 
 if [ $? -ne 0 ]; then
