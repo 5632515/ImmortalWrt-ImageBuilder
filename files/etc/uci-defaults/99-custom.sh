@@ -216,4 +216,11 @@ else
     echo "未检测到 Docker，跳过防火墙配置。"
 fi
 
+
+# ---- NanoPi R4S PWM fan control (pwmchip1) ----
+if grep -qi "NanoPi R4S" /proc/device-tree/model 2>/dev/null && [ -x /etc/init.d/fanctl ]; then
+    /etc/init.d/fanctl enable
+    echo "fanctl enabled for NanoPi R4S" >>$LOGFILE
+fi
+
 exit 0
