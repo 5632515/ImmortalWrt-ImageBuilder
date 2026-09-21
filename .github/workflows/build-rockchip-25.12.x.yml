@@ -6,7 +6,7 @@ on:
       luci_version:
         description: "选择luci版本"
         required: false
-        default: "25.12.1"
+        default: "25.12.2"
         type: choice
         options:
           - 25.12.0
@@ -80,16 +80,16 @@ on:
           - xunlong_orangepi-r1-plus
           - xunlong_orangepi-r1-plus-lts
         required: true
-        default: 'friendlyarm_nanopi-r3s'
+        default: 'friendlyarm_nanopi-r4s'
       custom_router_ip:
         description: "请设置软路由的管理地址(注意仅对多网口软路由有效) 格式:192.168.x.1 或 10.x.x.1"
         required: true
-        default: "192.168.100.1"
+        default: "192.168.110.248"
       rootfs_partsize:
         description: '选择软件包空间大小'
         required: true
         type: choice
-        default: '1G'
+        default: '2G'
         options:
           - '1G'
           - '2G'
@@ -109,6 +109,22 @@ on:
         options:
           - 'yes'
           - 'no'
+      enable_bypass:
+        description: "是否配置为单臂旁路由(关闭DHCP并指向主路由网关)?"
+        required: true
+        default: 'yes'
+        type: choice
+        options:
+        - 'yes'
+        - 'no'
+      bypass_gateway:
+        description: "旁路由上游网关(主路由地址), 仅 enable_bypass=yes 时生效"
+        required: false
+        default: "192.168.110.1"
+      bypass_dns:
+        description: "旁路由上游DNS, 仅 enable_bypass=yes 时生效"
+        required: false
+        default: "223.5.5.5"
       enable_pppoe:
         description: "是否配置PPPoE拨号信息?"
         required: true
@@ -136,7 +152,11 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Set executable permissions
-        run: chmod +x ${{ github.workspace }}/rockchip/build24.sh
+        run: |
+          chmod +x ${{ github.workspace }}/rockchip/build25.sh
+          chmod +x ${{ github.workspace }}/files/usr/sbin/fanctl.sh
+          chmod +x ${{ github.workspace }}/files/etc/init.d/fanctl
+          chmod +x ${{ github.workspace }}/files/etc/uci-defaults/99-custom.sh
       
       - name: Save Custom Router IP into OpenWrt files
         run: |
@@ -152,7 +172,23 @@ jobs:
               echo "Error: PPPoE account and password must be provided when PPPoE is enabled!"
               exit 1
             fi
+            if [[ "${{ inputs.enable_bypass }}" == "yes" ]]; then
+              echo "Error: 旁路由模式不需要 PPPoE 拨号, 两者不能同时启用!"
+              exit 1
+            fi
           fi
+
+      - name: Save bypass (single-arm) settings
+        run: |
+          mkdir -p "${{ github.workspace }}/custom"
+          cat > "${{ github.workspace }}/custom/bypass-settings" <<EOF
+          enable_bypass=${{ github.event.inputs.enable_bypass }}
+          bypass_ip=${{ github.event.inputs.custom_router_ip }}
+          bypass_netmask=255.255.255.0
+          bypass_gateway=${{ github.event.inputs.bypass_gateway }}
+          bypass_dns=${{ github.event.inputs.bypass_dns }}
+          EOF
+          cat "${{ github.workspace }}/custom/bypass-settings"
 
       - name: Enable Store integration
         run: |
@@ -165,9 +201,20 @@ jobs:
       - name: Check Docker
         run: |
           if [[ "${{ inputs.include_docker }}" == "yes" ]]; then
-             echo 'CUSTOM_PACKAGES="$CUSTOM_PACKAGES docker"' >> shell/custom-packages.sh
+             echo 'CUSTOM_PACKAGES="$CUSTOM_PACKAGES docker dockerd docker-compose"' >> shell/apk-custom-packages.sh
              echo "✅ 已为Rockchip平台补充 docker 组件"
           fi
+
+      - name: Prepare Geodata for PassWall
+        run: |
+          mkdir -p "${{ github.workspace }}/files/usr/share/v2ray"
+          curl -fsSL --retry 3 \
+            https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat \
+            -o "${{ github.workspace }}/files/usr/share/v2ray/geoip.dat"
+          curl -fsSL --retry 3 \
+            https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat \
+            -o "${{ github.workspace }}/files/usr/share/v2ray/geosite.dat"
+          ls -lh "${{ github.workspace }}/files/usr/share/v2ray/"
       
 
       - name: Building Rockchip ImmortalWrt 25.12.x
