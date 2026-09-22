@@ -38,6 +38,11 @@ CUSTOM_PACKAGES="$CUSTOM_PACKAGES mosdns luci-app-mosdns luci-i18n-mosdns-zh-cn"
 # 代理内核 xray-core/sing-box/hysteria/geoview 等已在 rockchip/build25.sh 中声明
 CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-passwall luci-i18n-passwall-zh-cn"
 
+# iStore 应用商店 (来自第三方 run 包 luci-app-store-0.2.0-r3_all.run)
+# 官方源不收录 istore, 必须由 run 包提供 luci-app-store 及其专属依赖
+# (luci-lib-taskd / taskd / luci-lib-xterm); curl/tar/mount-utils/luci-compat 等共性依赖由官方源自动拉取
+CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-store"
+
 # 仓库内代理相关apk
 #CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-nikki-zh-cn"
 #luci-app-openvpn-server 配置文件存在bug 因此请勿集成 避免报错 但你可以集成luci-i18n-openvpn-zh-cn

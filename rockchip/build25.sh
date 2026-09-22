@@ -120,6 +120,12 @@ PACKAGES="$PACKAGES luci-compat"
 PACKAGES="$PACKAGES luci-i18n-upnp-zh-cn"
 PACKAGES="$PACKAGES luci-i18n-ttyd-zh-cn"
 
+# ---- 文件共享与内网穿透 (官方源已核实存在) ----
+# Samba4 网络共享; luci-i18n-samba4-zh-cn 会自动带入 luci-app-samba4 与 samba4-server
+PACKAGES="$PACKAGES luci-i18n-samba4-zh-cn"
+# ZeroTier 虚拟组网; 同理会自动带入 luci-app-zerotier 与 zerotier 本体
+PACKAGES="$PACKAGES luci-i18n-zerotier-zh-cn"
+
 # ======== shell/apk-custom-packages.sh =======
 # 合并imm仓库以外的第三方插件
 PACKAGES="$PACKAGES $CUSTOM_PACKAGES"
